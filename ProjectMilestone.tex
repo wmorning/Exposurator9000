@@ -1,0 +1,130 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Machine Learning Milestone report
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[iop,apj]{emulateapj}
+\usepackage{amsmath,amssymb,amstext}
+
+% PACKAGES AND MARGINS:
+
+\usepackage[breaklinks,colorlinks,citecolor=blue,linkcolor=blue]{hyperref}
+\usepackage[all]{hypcap} %Links go to figures; breaks on deluxetables (use \capstartfalse \capstarttrue to fix it)
+\usepackage{float}
+\addtolength\voffset{0.8cm}
+
+% FORMATTING ETC:
+
+\newcommand{\ds}{\displaystyle}
+\newcommand{\be}{\begin{equation}}
+\newcommand{\ee}{\end{equation}}
+\newcommand{\bee}{\begin{eqnarray}}
+\newcommand{\eee}{\end{eqnarray}}
+
+% MATH MACROS:
+
+\def\pr{{\rm Pr}}
+\def\pars{\mathbf{x}}
+\def\parsi{x_i}
+\def\data{\mathbf{d}}
+\def\datai{d_i}
+\def\datap{\mathbf{d}^{\rm p}(\pars)}
+\def\datapi{d^{\rm p}_{i}(\pars)}
+
+% TEXT MACROS:
+
+\def\etal{\hbox{et al.} }
+\def\ie{{\it i.e.\ }}
+\def\eg{{\it e.g.\ }}
+
+% COMMENTING ETC:
+
+\usepackage[usenames]{color}
+\newcommand{\comment}[1]{\textcolor{blue}{\bf #1}}
+\newcommand{\question}[1]{\textcolor{blue}{\bf #1}}
+\newcommand{\todo}[2]{\textcolor{red}{\bf To do (#1): #2}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Project Milestone:  Searching for Artifacts in images from the Dark Energy Survey}
+\author{Joseph W. DeRose}
+\author{Warren R. Morningstar}
+\affil{Kavli Institute for Particle Astrophysics and Cosmology
+  \& Physics Department, Stanford University, Stanford, CA 94305, USA}
+
+
+
+
+\begin{abstract}
+In this paper, we present an implementation of a Machine Learning algorithm
+to be used in identifying and classifying image artifacts in observations taken by the Dark 
+Energy Survey (DES).  Specifically, we treat our individual pixels as features, and run a 
+classifier using a Support Vector Machine.  We find that our first implementation identifies
+image artifacts with an accuracy of {\color{red} Some Percent}.  We discuss future improvements
+to our modeling, and sources of systematic errors in our analysis, and how these errors may be 
+overcome.
+
+\end{abstract}
+
+\section{Introduction} \label{sec:intro}
+
+In modern cosmology, much attention has been turned toward using large photometric sky 
+surveys to provide strong constraints on structure formation and the composition of our 
+universe.  An important component of modern sky surveys is the management of the 
+large volumes of data produced by the survey instruments.  Typical data generation of 
+current sky surveys is several GB of data per night, and future sky surveys will produce
+TB of data in the same time frame.  Because of the vast quantities of data produced, 
+the majority of analysis is performed in an automated (or at least semi-automated) manner.
+
+While this provides significant advantages in performance, an obvious disadvantage is that
+it is prone to overlooking subtle features in the data, which may cause systematic errors
+in measurements of important quantities.  In particular, since the goal of many photometric
+surveys is to provide precise measurements of the brightness of astronomical objects, any
+spurious brightness variations within a detector has the potential to be interpreted as a real
+signal, and thus has the capability of interfering with the accuracy of measurements.
+
+Brightness variations in a detector can be caused in many different ways, and thus have a 
+diverse variety of appearances.  A few notable 
+examples that have been observed by ongoing sky surveys include airplanes and satellites
+passing across the field of view, cosmic rays striking the detector, and improper subtraction of 
+the background noise.  Some of these are detected and masked away by the survey 
+data reduction pipelines, but a large number are missed (these are usually referred to as
+artifacts).  Reliable identification of artifacts is an essential component of preparing data for
+analysis.  However, currently much of the identification of artifacts is carried out by members 
+of survey collaborations, a process that uses a significant number of human hours and that 
+could be better spent devoted to more scientifically interesting problems.  Therefore an 
+automated means of identifying and classifying image artifacts is desirable.  
+
+The Dark Energy Survey (DES) is a sky survey being conducted across many institutions.
+Survey is being carried out using the 4m Blanco Telescope located at the Cerro Tololo Inter-American
+Observatory in Chile.  The survey saw first light in 2012, and is currently in its 3rd year.  
+In this paper, we implement an algorithm for identification of image artifacts found in observations
+performed by DES.  We describe our data set in Section~\ref{sec:data}.  In Section~\ref{sec:methods}, we
+describe our choice of features and the implementation of our model.  In Section~\ref{sec:results}, we 
+present the results of preliminary classification runs.  In Section~\ref{sec:discussion}, we discuss these results, 
+including ways in which our modeling could be improved.
+
+\section{Data} \label{sec:data}
+
+{\color{red}  Describe our data set.  Include any undersampling of images we used, and how we intend to
+classify images.  Maybe a sample image or two, although I dunno if we're allowed to do that on account of the data is private.}
+
+\section{Methods} \label{sec:methods}
+
+{\color{red} SVM implementation.  Feature selection.  Any struggles we had along the way to show the volume of work we've done}
+
+\section{Results} \label{sec:results}
+
+{\color{red} How good did the SVM do?  A few preliminary quantitative results would be useful (e.g. test error for the SVM).  Maybe a plot or two showing some key feature that distinguishes artifacts from non-artifacts.  Not sure if there will even be such a thing.  Maybe cool to include a plot of a population of successfully identified artifacts}
+
+\section{Discussion} \label{sec:discussion} 
+
+{\color{red} Probably most of the milestone report to go here.  Discuss limitations of SVM for the problem we're 
+trying to accomplish.  Say what we're gonna do moving forward.  If no good results to show, explain what is going wrong currently.}
+
+
+
+
+
+
+\end{document}
