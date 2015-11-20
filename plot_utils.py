@@ -15,27 +15,44 @@ def confusion_plot(clf, X, y, plot=True):
         plt.ylabel(r'Predicted Label')
         plt.colorbar()
     
-def diagnostic_vs_m_plot(X,y,nsteps=5):
+def diagnostic_vs_m(X,y,nsteps=5):
     Xtrain, Xtest, ytrain, ytest = cross_validation.train_test_split(X,y,test_size=0.2)
-    ii = ytrain.argsort()
-    Xtrain = Xtrain[ii]
-    ytrain = ytrain[ii]
+
+    #fudge to give more than 1 class for small training sets
+    uy = np.unique(ytrain)
+    print('training labels: {0}'.format(uy))
+
+
     mtot = len(Xtrain)
-    mtrain = np.arange(mtot/nsteps,mtot,mtot/nsteps)
+    print('mtot: {0}'.format(mtot))
+    print('mtest: {0}'.format(len(ytest)))
+    print('farts: {0}'.format(len(np.where(y!=29))/len(y)))
+    mtrain = np.logspace(1,np.log10(mtot),nsteps)
+    mtrain = np.floor(mtrain)
     print(mtrain)
     tre = []
     tee = []
-    confusion = np.ndarray((29,29))
+    confusion = np.zeros((29,29))
     cfs = []
+
+    muy = np.unique(ytrain[:mtrain[0]])
+    if len(muy)==1:
+        ytrain[0] = muy[0]-1
     
     for m in mtrain:
         clf = svm.SVC(kernel='linear')
         clf.fit(Xtrain[:m],ytrain[:m])
         ytrpred = clf.predict(Xtrain[:m])
         ytepred = clf.predict(Xtest)
+
+        ntr = len(np.where(ytrain[:m]!=ytrpred)[0])
+        nte = len(np.where(ytest!=ytepred)[0])
         
-        tre.append(len(np.where(ytrain[:m]!=ytrpred)[0])/len(ytrpred))
-        tee.append(len(np.where(ytest!=ytepred)[0])/len(ytest))
+        print('Number of training errors with {0} examples: {1}'.format(m,ntr))
+        print('Number of test errors with {0} examples: {1}'.format(m,nte))
+        
+        tre.append(ntr/len(ytrpred))
+        tee.append(nte/len(ytest))
 
         for i, label in enumerate(ytest):
             confusion[label-1,ytepred[i]-1]+=1
