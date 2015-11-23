@@ -13,8 +13,16 @@ ConvNNet class, which contains several functions:
         the neural net (outputting the training)
         error as it goes
     
-    - Test inputs the neural net on a test data set.
-        It outputs the test error.
+    - Test runs the neural net on a test data set.
+        Can do whatever we make it do.
+    
+    - Save_model saves the session to the input filename.
+    
+    - Resume_from loads a saved session.
+    
+Also @Joe if you are wondering why I used a class, its 
+because the class allowed the session to be saved as a 
+global variable without it being a script.
 '''
 
 # ============================================================
@@ -33,16 +41,16 @@ class ConvNNet(object):
         
         return
     
-    def Train(self, runs , expids , artifacts , Nsteps , gridsize=128 , cgfactor=8 ):
+    def Train(self, runs , expids , artifacts , Nsteps , gridsize=128 , cgfactor=8 , load_data=True):
         '''
         This function creates the design matrix and loads the
         true clasifications (if they don't already exist).  
         It then runs the neural net to train the optimal 
         predicting scheme.
         
-        * Currently the neural net is more or less EXACTLY the 
-        same as used in the MNIST tutorial from Tensorflow (except
-        modified to use our image sizes etc.).  We 
+        * Currently the neural net is very similar to the
+        one used in the MNIST tutorial from Tensorflow (except
+        modified to use our images etc.).  We 
         should modify it further to fit our needs *
         
         Function inputs are below:
@@ -61,27 +69,34 @@ class ConvNNet(object):
         - cgfactor is coarse-graining factor.
         * Note:  must be evenly divisibile into gridsize *
         '''
-        assert 2048 % self.gridsize == 0
-        self.gridsize = gridsize
-        assert (self.gridsize//self.cgfactor)%4 == 0
-        self.cgfactor = cgfactor
+        
+        if load_data is True: # if false, must have X, ey, and ey2 loaded in mem.
+            assert 2048 % self.gridsize == 0
+            self.gridsize = gridsize
+            assert (self.gridsize//self.cgfactor)%4 == 0
+            self.cgfactor = cgfactor
         
 
-        # load/make training data:  @Joe: edit as needed.  In particular
-        # we need this in a format accepted by tensorflow (simple arrays
-        # are insufficient).
-        imagenames, bkgnames = get_training_filenames(runs,expids)
-        X , Y = create_design_matrix(imagenames , bkgnames , gridsize , cgfactor)
-        ey = enumerate_labels(y)
-    
-    
+            # load/make training data:  @Joe: edit as needed.  In particular
+            # we want X to have shape [Nexamples, Npixels], and y to 
+            # have shape [Nexamples , Ncategories] and be all zeros 
+            # along the second axis (except for the correct classification),
+            # which is a 1.  This is what ey2 is.
+            imagenames, bkgnames = get_training_filenames(runs,expids)
+            X , Y = create_design_matrix(imagenames , bkgnames , gridsize , cgfactor)
+            ey = enumerate_labels(Y)
+     
+            ey2 = np.zeros([len(ey),int(np.max(ey))+1],float)
+            for i in range(len(ey)):
+                ey2[i,ey[i]] = 1.0
     
     
         # Ncategories is number of classifications
         Ncategories = int(np.max(ey))+1
+        Nexamples = len(ey)
         
         # start neural net: define x,y placeholders and create session
-        self.Session = tf.InteractiveSession()  # not sure if we need interactive.
+        self.Session = tf.InteractiveSession()  # useful if running from notebook
         x = tf.placeholder("float",shape=[None,gridsize**2])
         x_image = tf.reshape(x,[-1,gridsize,gridsize,1])    
         y_ = tf.placeholder("float",shape=[None,Ncategories])
@@ -143,10 +158,10 @@ class ConvNNet(object):
         for i in range(Nsteps):
             # update the parameters using batch gradient descent.
             # use 50 examples per iteration (can change)
-            next_set = [(current_index+i) % X.shape[0] for i in range(50)]
+            next_set = [(current_index+i) % Nexamples for i in range(50)]
             x_examples = X[next_set,:]
-            y_examples = ey[next_set]
-            current_index = (current_index+50) % X.shape[0]
+            y_examples = ey2[next_set,:]
+            current_index = (current_index+50) % Nexamples
         
             #for every thousandth step, print the training error.
             if i%1000 ==0:
@@ -160,11 +175,11 @@ class ConvNNet(object):
         return
     
     
-    def test(self,test_data):
+    def Test(self,test_data):
         raise Exception('cannot test model yet \n')
         return
         
-    def save_model(self, filename):
+    def Save_model(self, filename):
         '''
         Use tensorflow's train.Saver to create checkpoint
         file.
@@ -174,7 +189,7 @@ class ConvNNet(object):
         saver.save(self.Session, filename, global_step=step)
         return
     
-    def resume_from(self, filename):
+    def Resume_from(self, filename):
         '''
         Use tensorflow's train.Saver to reload a saved
         checkpoint, and resume training.
