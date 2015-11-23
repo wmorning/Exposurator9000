@@ -83,7 +83,7 @@ class ConvNNet(object):
             # along the second axis (except for the correct classification),
             # which is a 1.  This is what ey2 is.
             imagenames, bkgnames = get_training_filenames(runs,expids)
-            X , Y = create_design_matrix(imagenames , bkgnames , gridsize , cgfactor)
+            X , Y = create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
             ey = enumerate_labels(Y)
      
             ey2 = np.zeros([len(ey),int(np.max(ey))+1],float)
