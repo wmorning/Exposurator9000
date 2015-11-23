@@ -86,13 +86,13 @@ class ConvNNet(object):
             X , Y = create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
             ey = enumerate_labels(Y)
      
-            ey2 = np.zeros([len(ey),int(np.max(ey))+1],float)
+            ey2 = np.zeros([len(ey),int(np.max(ey))],float)
             for i in range(len(ey)):
                 ey2[i,ey[i]-1] = 1.0
     
     
         # Ncategories is number of classifications
-        Ncategories = int(np.max(ey))+1
+        Ncategories = int(np.max(ey))
         Nexamples = len(ey)
         
         # start neural net: define x,y placeholders and create session
@@ -158,7 +158,7 @@ class ConvNNet(object):
         for i in range(Nsteps):
             # update the parameters using batch gradient descent.
             # use 50 examples per iteration (can change)
-            next_set = [(current_index+i) % Nexamples for i in range(50)]
+            next_set = np.arange(current_index,current_index+50,1)% Nexamples
             x_examples = X[next_set,:]
             y_examples = ey2[next_set,:]
             current_index = (current_index+50) % Nexamples
