@@ -88,7 +88,7 @@ class ConvNNet(object):
      
             ey2 = np.zeros([len(ey),int(np.max(ey))+1],float)
             for i in range(len(ey)):
-                ey2[i,ey[i]] = 1.0
+                ey2[i,ey[i]-1] = 1.0
     
     
         # Ncategories is number of classifications
