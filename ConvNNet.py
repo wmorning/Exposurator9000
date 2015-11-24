@@ -82,9 +82,9 @@ class ConvNNet(object):
             # have shape [Nexamples , Ncategories] and be all zeros 
             # along the second axis (except for the correct classification),
             # which is a 1.  This is what ey2 is.
-            imagenames, bkgnames = get_training_filenames(runs,expids)
-            X , Y = create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
-            ey = enumerate_labels(Y)
+            imagenames, bkgnames = InD.get_training_filenames(runs,expids)
+            X , Y = InD.create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
+            ey = InD.enumerate_labels(Y)
      
             ey2 = np.zeros([len(ey),int(np.max(ey))],float)
             for i in range(len(ey)):
@@ -179,14 +179,17 @@ class ConvNNet(object):
         raise Exception('cannot test model yet \n')
         return
         
-    def Save_model(self, filename):
+    def Save_model(self, filename, Nsteps):
         '''
         Use tensorflow's train.Saver to create checkpoint
         file.
+        
+        - Nsteps is number of training steps that have already
+            been run.
         '''
         raise Exception('cannot save model yet \n')
         saver = tf.train.Saver()
-        saver.save(self.Session, filename, global_step=step)
+        saver.save(self.Session, filename, global_step=Nsteps)
         return
     
     def Resume_from(self, filename):
