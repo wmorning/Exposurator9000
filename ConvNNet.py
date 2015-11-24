@@ -40,8 +40,52 @@ class ConvNNet(object):
         self.Nsteps = None
         
         return
+        
+    def load_data(self, runs, expids, artifacts, gridsize=128, cgfactor=8):
+        '''
+        load/make training data:  @Joe: edit as needed.  In particular
+        we want X to have shape [Nexamples, Npixels], and y to 
+        have shape [Nexamples , Ncategories] and be all zeros 
+        along the second axis (except for the correct classification),
+        which is a 1.  This is what ey2 is.
+        
+        Function inputs are as follows:
+        
+        - runs is the run info of the training data
     
-    def Train(self, runs , expids , artifacts , Nsteps , gridsize=128 , cgfactor=8 , load_data=True):
+        - expids are the exposure ids of the training data
+    
+        - artifacts is list of artifact objects (preprocessed)
+        
+        - gridsize is size (in pixels) of the postage stamps.
+        * Note:  must be evenly divisible into 2048 *
+        
+        - cgfactor is coarse-graining factor.
+        * Note:  must be evenly divisibile into gridsize *
+        '''
+        
+        self.gridsize = gridsize        
+        assert 2048 % self.gridsize == 0
+        self.cgfactor = cgfactor        
+        assert (self.gridsize//self.cgfactor)%4 == 0
+        
+        imagenames, bkgnames = InD.get_training_filenames(runs,expids)
+        X , Y = InD.create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
+        ey = InD.enumerate_labels(Y)
+     
+        ey2 = np.zeros([len(ey),int(np.max(ey))],float)
+        for i in range(len(ey)):
+            ey2[i,ey[i]-1] = 1.0
+            
+        self.X = X
+        self.y = ey2
+        self.Nexamples = len(ey)
+        self.Ncategories = int(np.max(ey))
+
+        
+    
+    def Train(self, Nsteps, Nfeatures_conv1, Wsize_1, Nfeatures_conv2, \
+                Wsize_2, Xlen_3):
         '''
         This function creates the design matrix and loads the
         true clasifications (if they don't already exist).  
@@ -55,57 +99,37 @@ class ConvNNet(object):
         
         Function inputs are below:
     
-        - runs is the run info of the training data
-    
-        - expids are the exposure ids of the training data
-    
-        - artifacts is list of artifact objects (preprocessed)
-    
         - Nsteps is number of training steps to run
     
-        - gridsize is size (in pixels) of the postage stamps.
-        * Note:  must be evenly divisible into 2048 *
+        - Nfeatures_conv1 is the number of convolution features (images)
+        in the first layer
         
-        - cgfactor is coarse-graining factor.
-        * Note:  must be evenly divisibile into gridsize *
-        '''
+        - Wsize_1 is the size of the first convolution filter 
+        (assumed to be square)
         
-        if load_data is True: # if false, must have X, ey, and ey2 loaded in mem.
-            assert 2048 % self.gridsize == 0
-            self.gridsize = gridsize
-            assert (self.gridsize//self.cgfactor)%4 == 0
-            self.cgfactor = cgfactor
-        
+        - Nfeatures_conv2 is the number of convolution features (images) in
+        the second layer
 
-            # load/make training data:  @Joe: edit as needed.  In particular
-            # we want X to have shape [Nexamples, Npixels], and y to 
-            # have shape [Nexamples , Ncategories] and be all zeros 
-            # along the second axis (except for the correct classification),
-            # which is a 1.  This is what ey2 is.
-            imagenames, bkgnames = InD.get_training_filenames(runs,expids)
-            X , Y = InD.create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
-            ey = InD.enumerate_labels(Y)
-     
-            ey2 = np.zeros([len(ey),int(np.max(ey))],float)
-            for i in range(len(ey)):
-                ey2[i,ey[i]-1] = 1.0
-    
-    
-        # Ncategories is number of classifications
-        Ncategories = int(np.max(ey))
-        Nexamples = len(ey)
+        - Wsize_2 is the size of the second convolution filter 
+        (assumed to be square).
+        
+        - Xlen_3 is the length of the densely connected features vector.
+        '''
         
         # start neural net: define x,y placeholders and create session
         self.Session = tf.InteractiveSession()  # useful if running from notebook
-        x = tf.placeholder("float",shape=[None,gridsize**2])
-        x_image = tf.reshape(x,[-1,gridsize,gridsize,1])    
-        y_ = tf.placeholder("float",shape=[None,Ncategories])
+        x = tf.placeholder("float",shape=[None,self.gridsize**2])
+        x_image = tf.reshape(x,[-1,self.gridsize,self.gridsize,1])    
+        y_ = tf.placeholder("float",shape=[None,self.Ncategories])
     
         # create first layer
         # here we create 32 new images using a convolution with a
         # 5x5x32 weights filter plus a bias (one for each new image)
-        W_conv1 = weight_variable([5,5,1,32])  # play around with altering sizes
-        b_conv1 = bias_variable([32])# length should be same as last dimension of W_conv1
+        # This is equivalent to measuring 32 features for each 5x5 
+        # pannel of the original image.  We'll likely want many more 
+        # features, and to use more pixels.  Keep that in mind.
+        W_conv1 = weight_variable([Wsize_1,Wsize_1,1,Nfeatures_conv1])  # play around with altering sizes
+        b_conv1 = bias_variable([Nfeatures_conv1])# length should be same as last dimension of W_conv1
         h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1)+b_conv1)
         # split each image into 4, and obtain the maximum quadrant
         h_pool1 = max_pool_2x2(h_conv1)
@@ -117,8 +141,8 @@ class ConvNNet(object):
         # term.  The shape of the result is the shape of the original image 
         # divided by 4 on each axis by 64 (i.e. if you started with a 
         # 2048x2048 image, you now have a 512x512x64 image)
-        W_conv2 = weight_variable([5,5,32,64]) # again, play with altering sizes
-        b_conv2 = bias_variable([64])          # of the first two axes
+        W_conv2 = weight_variable([Wsize_2,Wsize_2,Nfeatures_conv1,Nfeatures_conv2]) # again, play with altering sizes
+        b_conv2 = bias_variable([Nfeatures_conv2])          # of the first two axes
         h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
         # split each image into 4, and obtain the maximum quadrant
         h_pool2 = max_pool_2x2(h_conv2)
@@ -126,11 +150,11 @@ class ConvNNet(object):
         # Densely Connected layer
         # Here, the 7x7x64 image tensor is flattened, and we get a 
         # 1x1024 vector using the form h_fc1 = h_2 * W + b
-        W_fc1 = weight_variable([(self.gridsize//4)*(self.gridsize//4)*64, 1024])
-        b_fc1 = bias_variable([1024])
+        W_fc1 = weight_variable([(self.gridsize//self.cgfactor//4)**2*Nfeatures_conv2, Xlen_3])
+        b_fc1 = bias_variable([Xlen_3])
         h_pool2_flat = tf.reshape(h_pool2, [-1, \
                                   (self.gridsize//self.cgfactor//4) \
-                                  *(self.gridsize//self.cgfactor//4)*64])
+                                  *(self.gridsize//self.cgfactor//4)*Nfeatures_conv2])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1)+b_fc1)
     
         # avoid overfitting using tensorflows dropout function.
@@ -140,8 +164,8 @@ class ConvNNet(object):
         h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
     
         # finally, a softmax regression to predict the output
-        W_fc2 = weight_variable([1024,Ncategories])
-        b_fc2 = bias_variable([Ncategories])
+        W_fc2 = weight_variable([Xlen_3,self.Ncategories])
+        b_fc2 = bias_variable([self.Ncategories])
     
         # output of NN
         y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
@@ -158,10 +182,10 @@ class ConvNNet(object):
         for i in range(Nsteps):
             # update the parameters using batch gradient descent.
             # use 50 examples per iteration (can change)
-            next_set = np.arange(current_index,current_index+50,1)% Nexamples
-            x_examples = X[next_set,:]
-            y_examples = ey2[next_set,:]
-            current_index = (current_index+50) % Nexamples
+            next_set = np.arange(current_index,current_index+50,1)% self.Nexamples
+            x_examples = self.X[next_set,:]
+            y_examples = self.y[next_set,:]
+            current_index = (current_index+50) % self.Nexamples
         
             #for every thousandth step, print the training error.
             if i%1000 ==0:
