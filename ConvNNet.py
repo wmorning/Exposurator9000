@@ -84,8 +84,8 @@ class ConvNNet(object):
 
         
     
-    def Train(self, Nsteps, Nfeatures_conv1, Wsize_1, Nfeatures_conv2, \
-                Wsize_2, Xlen_3):
+    def Train(self, Nsteps, Nfeatures_conv1=32, Wsize_1=5, Nfeatures_conv2=64, \
+                Wsize_2=5, Xlen_3=1024):
         '''
         This function creates the design matrix and loads the
         true clasifications (if they don't already exist).  
