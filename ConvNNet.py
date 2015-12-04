@@ -117,10 +117,10 @@ class ConvNNet(object):
         '''
         
         # start neural net: define x,y placeholders and create session
-        self.Session = tf.InteractiveSession()  # useful if running from notebook
-        x = tf.placeholder("float",shape=[None,self.gridsize**2])
-        x_image = tf.reshape(x,[-1,self.gridsize,self.gridsize,1])    
-        y_ = tf.placeholder("float",shape=[None,self.Ncategories])
+        #self.Session = tf.InteractiveSession()  # useful if running from notebook
+        self.x = tf.placeholder("float",shape=[None,self.gridsize**2])
+        self.x_image = tf.reshape(self.x,[-1,self.gridsize,self.gridsize,1])    
+        self.y_ = tf.placeholder("float",shape=[None,self.Ncategories])
     
         # create first layer
         # here we create 32 new images using a convolution with a
@@ -128,11 +128,11 @@ class ConvNNet(object):
         # This is equivalent to measuring 32 features for each 5x5 
         # pannel of the original image.  We'll likely want many more 
         # features, and to use more pixels.  Keep that in mind.
-        W_conv1 = weight_variable([Wsize_1,Wsize_1,1,Nfeatures_conv1])  # play around with altering sizes
-        b_conv1 = bias_variable([Nfeatures_conv1])# length should be same as last dimension of W_conv1
-        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1)+b_conv1)
+        self.W_conv1 = weight_variable([Wsize_1,Wsize_1,1,Nfeatures_conv1])  # play around with altering sizes
+        self.b_conv1 = bias_variable([Nfeatures_conv1])# length should be same as last dimension of W_conv1
+        self.h_conv1 = tf.nn.relu(conv2d(self.x_image, self.W_conv1)+self.b_conv1)
         # split each image into 4, and obtain the maximum quadrant
-        h_pool1 = max_pool_2x2(h_conv1)
+        self.h_pool1 = max_pool_2x2(self.h_conv1)
     
         # create second layer
         # here each of our 32 intermediate images is convolved with
@@ -141,40 +141,41 @@ class ConvNNet(object):
         # term.  The shape of the result is the shape of the original image 
         # divided by 4 on each axis by 64 (i.e. if you started with a 
         # 2048x2048 image, you now have a 512x512x64 image)
-        W_conv2 = weight_variable([Wsize_2,Wsize_2,Nfeatures_conv1,Nfeatures_conv2]) # again, play with altering sizes
-        b_conv2 = bias_variable([Nfeatures_conv2])          # of the first two axes
-        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+        self.W_conv2 = weight_variable([Wsize_2,Wsize_2,Nfeatures_conv1,Nfeatures_conv2]) # again, play with altering sizes
+        self.b_conv2 = bias_variable([Nfeatures_conv2])          # of the first two axes
+        self.h_conv2 = tf.nn.relu(conv2d(self.h_pool1, self.W_conv2) + self.b_conv2)
         # split each image into 4, and obtain the maximum quadrant
-        h_pool2 = max_pool_2x2(h_conv2)
+        self.h_pool2 = max_pool_2x2(self.h_conv2)
     
         # Densely Connected layer
         # Here, the 7x7x64 image tensor is flattened, and we get a 
         # 1x1024 vector using the form h_fc1 = h_2 * W + b
-        W_fc1 = weight_variable([(self.gridsize//self.cgfactor//4)**2*Nfeatures_conv2, Xlen_3])
-        b_fc1 = bias_variable([Xlen_3])
-        h_pool2_flat = tf.reshape(h_pool2, [-1, \
+        self.W_fc1 = weight_variable([(self.gridsize//self.cgfactor//4)**2*Nfeatures_conv2, Xlen_3])
+        self.b_fc1 = bias_variable([Xlen_3])
+        self.h_pool2_flat = tf.reshape(self.h_pool2, [-1, \
                                   (self.gridsize//self.cgfactor//4) \
                                   *(self.gridsize//self.cgfactor//4)*Nfeatures_conv2])
-        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1)+b_fc1)
+        self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool2_flat, self.W_fc1)+self.b_fc1)
     
         # avoid overfitting using tensorflows dropout function.
         # specifically, we keep each component of h_fc1 with
         # probability keep_prob.
-        keep_prob = tf.placeholder("float")
-        h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+        self.keep_prob = tf.placeholder("float")
+        self.h_fc1_drop = tf.nn.dropout(self.h_fc1, self.keep_prob)
     
         # finally, a softmax regression to predict the output
-        W_fc2 = weight_variable([Xlen_3,self.Ncategories])
-        b_fc2 = bias_variable([self.Ncategories])
+        self.W_fc2 = weight_variable([Xlen_3,self.Ncategories])
+        self.b_fc2 = bias_variable([self.Ncategories])
     
         # output of NN
-        y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
-    
+        self.y_conv = tf.nn.softmax(tf.matmul(self.h_fc1_drop, self.W_fc2) + self.b_fc2)
+        self.Session = tf.Session()
         # run the optimization.  We'll minimize the cross entropy
-        cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
-        train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-        correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction,"float"))
+        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
+        self.train_step = tf.train.AdamOptimizer(1e-4).minimize(self.cross_entropy)
+        self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
+        self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction,"float"))
+
         self.Session.run(tf.initialize_all_variables())
         
         # batch gradient descent ticker
@@ -189,18 +190,24 @@ class ConvNNet(object):
         
             #for every thousandth step, print the training error.
             if i%1000 ==0:
-                train_accuracy = accuracy.eval(feed_dict={x:x_examples \
-                             , y_: y_examples, keep_prob: 1.0})
+                train_accuracy = self.accuracy.eval(feed_dict={self.x:x_examples \
+                             , self.y_: y_examples, self.keep_prob: 1.0},session=self.Session)
                 print "step %d, training accuracy %g"%(i, train_accuracy)
         
-            train_step.run(feed_dict={x: x_examples, y_: y_examples, keep_prob: 0.5})
-    
-    
+            self.train_step.run(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 0.5},session=self.Session)
+
+
         return
     
     
-    def Test(self,test_data):
-        raise Exception('cannot test model yet \n')
+    def Test(self,test_data_x,test_data_y):
+        '''
+        Test the current model on an input set of data
+        '''
+        test_accuracy = self.accuracy.eval(feed_dict={self.x:test_data_x \
+                        , self.y_: test_data_y, self.keep_prob: 1.0},session=self.Session)        
+        print('Test Accuracy: ', test_accuracy)
+        #raise Exception('cannot test model yet \n')
         return
         
     def Save_model(self, filename, Nsteps):
