@@ -54,7 +54,7 @@ def coarsegrain(stamp, factor=8):
     return(cgstamp)
     
 
-def create_design_matrix(imagenames, bkgnames, artifacts, gridsize=128, cgfactor=8):
+def create_design_matrix(imagenames, bkgnames, artifacts, gridsize=128, cgfactor=8, farts=0.5, save_mb=False):
     assert((2048%gridsize==0) & (gridsize<=2048))
     assert(len(imagenames)==len(bkgnames))
     nxpixels  = 4096
@@ -106,9 +106,20 @@ def create_design_matrix(imagenames, bkgnames, artifacts, gridsize=128, cgfactor
     print('ygrid: {0}'.format(len(ygrid)))
     print(eident.dtype)
     print(aident.dtype)
-    
+    mb = 0
     aidx = np.searchsorted(aident, eident[0])
     for i, e in enumerate(eident):
+        if save_mb:
+            if (len(features)%100==0) & (len(features)!=0):
+                features = np.array(features)
+                labels = np.array(labels)
+                np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/X_{0}_{1}_{2}_{3}_mb{4}.npy'.format(len(eident), farts, gridsize, cgfactor, mb), features)
+                np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/y_{0}_{1}_{2}_{3}_mb{4}.npy'.format(len(eident), farts, gridsize, cgfactor, mb), labels)
+                features = []
+                labels = []
+                mb+=1
+
+                
         assert(e==bident[i])
         print(e)
         exp = fitsio.read(edirs[i], ext=1)
@@ -157,9 +168,12 @@ def create_design_matrix(imagenames, bkgnames, artifacts, gridsize=128, cgfactor
 
         aidx+=(tidx-aidx)
         
-    
     features = np.array(features)
     labels = np.array(labels)
+
+    if save_mb:
+        np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/X_{0}_{1}_{2}_{3}_mb{4}.npy'.format(len(eident), farts, gridsize, cgfactor, mb), features)
+        np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/y_{0}_{1}_{2}_{3}_mb{4}.npy'.format(len(eident), farts, gridsize, cgfactor, mb), labels)
     
     return features, labels
 
@@ -259,7 +273,7 @@ def get_training_filenames(runs, expids, nimg=None):
     
     return imgnames, bkgnames
 
-def train_and_validate(runs, expids, ccds, ident, artpath, nimg=None, farts=None, gridsize=128, cgfactor=8):
+def train_and_validate(runs, expids, ccds, ident, artpath, nimg=None, farts=None, gridsize=128, cgfactor=8, store_design=False):
 
     artifacts = load_release_artifacts(artpath)
     aident = np.array([a.ident[2:] for a in artifacts], dtype=str)
@@ -285,8 +299,12 @@ def train_and_validate(runs, expids, ccds, ident, artpath, nimg=None, farts=None
     artifacts = artifacts[aii]
     aidx = np.unique(np.array([np.searchsorted(aident, m) for m in mident]))
 
-    X, y = create_design_matrix(imgnames, bkgnames, artifacts[aidx], gridsize=gridsize, cgfactor=cgfactor)
+    X, y = create_design_matrix(imgnames, bkgnames, artifacts[aidx], gridsize=gridsize, cgfactor=cgfactor, farts=farts, save_mb=store_design)
     ey = enumerate_labels(y)
+    
+    if store_design:
+        np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/X_{0}_{1}_{2}_{3}.npy'.format(nimg, farts, gridsize, cgfactor), X)
+        np.save('/nfs/slac/g/ki/ki23/des/jderose/des/inDianajonES/data/y_{0}_{1}_{2}_{3}.npy'.format(nimg, farts, gridsize, cgfactor), ey)
 
     tre, tee, cfs, mtrain, clf = pu.diagnostic_vs_m(X, ey, nsteps=5)
 
@@ -318,5 +336,5 @@ if __name__=='__main__':
     
     runinfo = np.genfromtxt('/u/ki/jderose/ki23/des/se_exposures/exp_run_info.csv', dtype=None, delimiter=',', skip_header=1)
     ident = np.array(['_'.join([str(r['f5']),str(r['f4'])]) for r in runinfo])
-    tre, tee, cfs, mtrain, clf = train_and_validate(runinfo['f2'], runinfo['f5'], runinfo['f4'], ident, artpath, nimg=nimg, farts=fart, gridsize=gs, cgfactor=cgf)
+    tre, tee, cfs, mtrain, clf = train_and_validate(runinfo['f2'], runinfo['f5'], runinfo['f4'], ident, artpath, nimg=nimg, farts=fart, gridsize=gs, cgfactor=cgf, store_design=True)
     
