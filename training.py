@@ -109,7 +109,7 @@ def create_design_matrix(imagenames, bkgnames, artifacts, gridsize=128, cgfactor
     mb = 0
     aidx = np.searchsorted(aident, eident[0])
     for i, e in enumerate(eident):
-        if savemb:
+        if save_mb:
             if (len(features)%100==0) & (len(features)!=0):
                 features = np.array(features)
                 labels = np.array(labels)
