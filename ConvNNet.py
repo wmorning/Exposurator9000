@@ -229,7 +229,7 @@ class ConvNNet(object):
         - Nsteps is number of training steps that have already
             been run.
         '''
-        raise Exception('cannot save model yet \n')
+        #raise Exception('cannot save model yet \n')
         saver = tf.train.Saver()
         saver.save(self.Session, filename, global_step=Nsteps)
         return
@@ -240,6 +240,7 @@ class ConvNNet(object):
         checkpoint, and resume training.
         '''
         raise Exception('cannot resume training yet \n')
+        self.Session = tf.Session()
         saver = tf.train.Saver()
         saver.restore(self.Session, filename)
         return
