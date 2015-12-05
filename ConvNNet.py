@@ -32,57 +32,53 @@ class ConvNNet(object):
     ConvNNet implements a convolutional neural network 
     using the TensorFlow framework.
     '''
-    def __init__(self):
+    def __init__(self, nimg, farts, gridsize, cgfactor, mbsize=100,
+                 mbpath='/home/jderose/scratch/des/data', batchsize=20):
         
-        self.runs = None
-        self.expids = None
-        self.artifacts = None
-        self.Nsteps = None
-        
-        return
-        
-    def load_data(self, runs, expids, artifacts, gridsize=128, cgfactor=8):
-        '''
-        load/make training data:  @Joe: edit as needed.  In particular
-        we want X to have shape [Nexamples, Npixels], and y to 
-        have shape [Nexamples , Ncategories] and be all zeros 
-        along the second axis (except for the correct classification),
-        which is a 1.  This is what ey2 is.
-        
-        Function inputs are as follows:
-        
-        - runs is the run info of the training data
-    
-        - expids are the exposure ids of the training data
-    
-        - artifacts is list of artifact objects (preprocessed)
-        
-        - gridsize is size (in pixels) of the postage stamps.
-        * Note:  must be evenly divisible into 2048 *
-        
-        - cgfactor is coarse-graining factor.
-        * Note:  must be evenly divisibile into gridsize *
-        '''
-        
-        self.gridsize = gridsize        
-        assert 2048 % self.gridsize == 0
-        self.cgfactor = cgfactor        
-        assert (self.gridsize//self.cgfactor)%4 == 0
-        
-        imagenames, bkgnames = InD.get_training_filenames(runs,expids)
-        X , Y = InD.create_design_matrix(imagenames , bkgnames , artifacts , gridsize , cgfactor)
-        ey = InD.enumerate_labels(Y)
-     
-        ey2 = np.zeros([len(ey),int(np.max(ey))],float)
+        self.nimg = nimg
+        self.farts = farts
+        self.gridsize = gridsize
+        self.cgfactor = cgfactor
+        self.Nmb = (self.nimg+mbsize-1)//mbsize
+        self.Ncategories = 29
+        self.mbpath = mbpath
+        self.mbsize = mbsize
+        self.batchsize = batchsize
+        self.Nstepspermb = 10
+
+
+    def convert_labels(self, y):
+
+        ey = InD.enumerate_labels(y)
+
+        ey2 = np.zeros([len(ey),self.Ncategories],float)
         for i in range(len(ey)):
             ey2[i,ey[i]-1] = 1.0
             
-        self.X = X
-        self.y = ey2
-        self.Nexamples = len(ey)
-        self.Ncategories = int(np.max(ey))
+        return ey
 
+    
+    def load_minibatch(self, filepath, nimg, farts, gridsize, cg, num):
+        """
+        Load a mini batch of images and their labels. 
+        Labels need to be converted to tensorflow
+        format
+
+        inputs:
+        filepath -- Path where the files are located
+        nimg -- Number of images in the total batch
+        farts -- Fraction of artifacts
+        gridsize -- Number of pixels to a side
+        cg -- Coarsegraining factor 
+        num -- The minibatch number 
+        """
         
+        X = np.load('{0}/X_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        y = np.load('{0}/y_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+
+        ey = self.convert_labels(y)
+        
+        return X, ey
     
     def Train(self, Nsteps, Nfeatures_conv1=32, Wsize_1=5, Nfeatures_conv2=64, \
                 Wsize_2=5, Xlen_3=1024):
@@ -118,6 +114,7 @@ class ConvNNet(object):
         
         # start neural net: define x,y placeholders and create session
         #self.Session = tf.InteractiveSession()  # useful if running from notebook
+        print('Allocating placeholders')
         self.x = tf.placeholder("float",shape=[None,self.gridsize**2])
         self.x_image = tf.reshape(self.x,[-1,self.gridsize,self.gridsize,1])    
         self.y_ = tf.placeholder("float",shape=[None,self.Ncategories])
@@ -128,12 +125,14 @@ class ConvNNet(object):
         # This is equivalent to measuring 32 features for each 5x5 
         # pannel of the original image.  We'll likely want many more 
         # features, and to use more pixels.  Keep that in mind.
+        print('Creating first layer')
         self.W_conv1 = weight_variable([Wsize_1,Wsize_1,1,Nfeatures_conv1])  # play around with altering sizes
         self.b_conv1 = bias_variable([Nfeatures_conv1])# length should be same as last dimension of W_conv1
         self.h_conv1 = tf.nn.relu(conv2d(self.x_image, self.W_conv1)+self.b_conv1)
         # split each image into 4, and obtain the maximum quadrant
         self.h_pool1 = max_pool_2x2(self.h_conv1)
     
+        print('Creating second layer')
         # create second layer
         # here each of our 32 intermediate images is convolved with
         # a 5x5x64 weights filter.  We create 64 new images by summing
@@ -147,6 +146,7 @@ class ConvNNet(object):
         # split each image into 4, and obtain the maximum quadrant
         self.h_pool2 = max_pool_2x2(self.h_conv2)
     
+        print('Creating densely connected layer')
         # Densely Connected layer
         # Here, the 7x7x64 image tensor is flattened, and we get a 
         # 1x1024 vector using the form h_fc1 = h_2 * W + b
@@ -157,44 +157,55 @@ class ConvNNet(object):
                                   *(self.gridsize//self.cgfactor//4)*Nfeatures_conv2])
         self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool2_flat, self.W_fc1)+self.b_fc1)
     
+        print('Dropout')
         # avoid overfitting using tensorflows dropout function.
         # specifically, we keep each component of h_fc1 with
         # probability keep_prob.
         self.keep_prob = tf.placeholder("float")
         self.h_fc1_drop = tf.nn.dropout(self.h_fc1, self.keep_prob)
-    
+        
+        print('Softmax')
         # finally, a softmax regression to predict the output
         self.W_fc2 = weight_variable([Xlen_3,self.Ncategories])
         self.b_fc2 = bias_variable([self.Ncategories])
     
+        print('Setting output format')
         # output of NN
         self.y_conv = tf.nn.softmax(tf.matmul(self.h_fc1_drop, self.W_fc2) + self.b_fc2)
         self.Session = tf.Session()
+        
+        print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
         self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
         self.train_step = tf.train.AdamOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction,"float"))
 
+        print('Running session')
         self.Session.run(tf.initialize_all_variables())
         
         # batch gradient descent ticker
         current_index = 0
-        for i in range(Nsteps):
-            # update the parameters using batch gradient descent.
-            # use 50 examples per iteration (can change)
-            next_set = np.arange(current_index,current_index+50,1)% self.Nexamples
-            x_examples = self.X[next_set,:]
-            y_examples = self.y[next_set,:]
-            current_index = (current_index+50) % self.Nexamples
+        for i in range(self.Nmb):
+            print('Minibatch {0}'.format(i))
+            self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
+                                       self.cgfactor, i)
+            for j in range(self.Nstepspermb):
+                print('Batch {0}'.format(j))
+                # update the parameters using batch gradient descent.
+                # use 50 examples per iteration (can change)
+                next_set = np.arange(current_index,current_index+self.batchsize,1)% self.mbsize
+                x_examples = self.X[next_set,:]
+                y_examples = self.y[next_set,:]
+                current_index = (current_index+self.batchsize) % self.mbsize
+                
+                #for every thousandth step, print the training error.
+                if (i*self.Nstepspermb+j)%1000 ==0:
+                    train_accuracy = self.accuracy.eval(feed_dict={self.x:x_examples \
+                                                       , self.y_: y_examples, self.keep_prob: 1.0},session=self.Session)
+                    print "step %d, training accuracy %g"%(i, train_accuracy)
         
-            #for every thousandth step, print the training error.
-            if i%1000 ==0:
-                train_accuracy = self.accuracy.eval(feed_dict={self.x:x_examples \
-                             , self.y_: y_examples, self.keep_prob: 1.0},session=self.Session)
-                print "step %d, training accuracy %g"%(i, train_accuracy)
-        
-            self.train_step.run(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 0.5},session=self.Session)
+                self.train_step.run(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 0.5},session=self.Session)
 
 
         return
