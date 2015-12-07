@@ -94,8 +94,8 @@ class ConvNNet(object):
         cg_additional -- additional coursegraining to perform on the fly
         """
             
-        X = np.load('{0}/X_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
-        y = np.load('{0}/y_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        X = np.load('{0}/Xs_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        y = np.load('{0}/ys_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
         X[X==-99] = 0
         if cg_additional!=1:
             X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
@@ -202,6 +202,7 @@ class ConvNNet(object):
         # run the optimization.  We'll minimize the cross entropy
         self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
         self.train_step = tf.train.AdamOptimizer(1e-2, epsilon=0.1).minimize(self.cross_entropy)
+        #self.nfn = min_false_neg(self.y_conv, self.y_, self.Ncategories, session=self.Session)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
         #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
@@ -324,6 +325,28 @@ def max_pool_2x2(x):
     Return quadrant of image with max pixel values
     '''
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+
+def min_false_neg(y, ytrue, nclass, naclass='last', session=None):
+    
+    Lweights = np.ones((nclass, nclass), dtype=np.float32)
+
+    if naclass=='last':
+        Lweights[-1,:] = 1000
+    else:
+        Lweights[0,:] = 1000
+
+    dL =  Lweights.diagonal()
+    dL = 0
+    Lweights = tf.constant(Lweights)
+    print(Lweights.get_shape())
+    print(y.get_shape())
+    print(ytrue.get_shape())
+    L = tf.matmul(ytrue, tf.matmul(Lweights, tf.transpose(y)))
+    print(L.get_shape())
+
+    L = tf.pack([L[i,i] for i in range(nclass)])
+    
+    return tf.reduce_sum(L)
 
 # ------------------------------------------------------------
 
