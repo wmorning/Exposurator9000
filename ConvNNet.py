@@ -34,7 +34,7 @@ class ConvNNet(object):
     '''
     def __init__(self, nimg, farts, gridsize, cgfactor, mbsize=100,
                  mbpath='/home/jderose/scratch/des/data', batchsize=1,
-                 cgafactor=1, Ncategories=29):
+                 cgafactor=1, Ncategories=29, Nstepspermb=20):
         
         self.nimg = nimg
         self.farts = farts
@@ -46,14 +46,14 @@ class ConvNNet(object):
         self.mbpath = mbpath
         self.mbsize = mbsize
         self.batchsize = batchsize
-        self.Nstepspermb = 20
+        self.Nstepspermb = Nstepspermb
         self.savefreq = 1000
 
         
         if self.Ncategories == 29:
             self.twoclasses = False
         elif self.Ncategories == 2:
-                self.twoclasses = True
+            self.twoclasses = True
         else:
             print 'You chose the wrong # of classes bro \n'
             print 'Switching to the default (29) classes \n'
@@ -61,8 +61,6 @@ class ConvNNet(object):
             self.Ncategories = 29
         
             
-
-
     def convert_labels(self, y, twoclasses):
 
         ey = InD.enumerate_labels(y)
@@ -200,11 +198,11 @@ class ConvNNet(object):
         
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
-        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
-        self.train_step = tf.train.AdamOptimizer(1e-2, epsilon=0.1).minimize(self.cross_entropy)
+        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv, 1e-10, 1.0)))
+        #self.train_step = tf.train.AdamOptimizer(1e-2, epsilon=0.1).minimize(self.cross_entropy)
         #self.nfn = min_false_neg(self.y_conv, self.y_, self.Ncategories, session=self.Session)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
-        #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
+        self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction,"float"))
 
@@ -214,15 +212,15 @@ class ConvNNet(object):
         # batch gradient descent ticker
         current_index = 0
         testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, 0, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
+                                           self.cgfactor, 1, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
 
         for npass in range(Nsteps):
             for i in range(self.Nmb):
-                print('Minibatch {0}'.format(i))
+                #print('Minibatch {0}'.format(i))
                 self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
                                                      self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses)
                 for j in range(self.Nstepspermb):
-                    print('Batch {0}'.format(j))
+                    #print('Batch {0}'.format(j))
                     # update the parameters using batch gradient descent.
                     # use 50 examples per iteration (can change)
                     next_set = np.arange(current_index,current_index+self.batchsize,1)% self.mbsize
@@ -242,13 +240,13 @@ class ConvNNet(object):
                         self.W1old = 1*self.W1curr
                     self.W1curr = self.W_conv1.eval(session=self.Session)
                     if (npass!=0) or (j!=0):
-                        print('model evolved by: ', np.sum(abs(self.W1curr-self.W1old)))
+                        print('model change, X-entropy: {0}, {1}'.format(np.sum(abs(self.W1curr-self.W1old)), self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))
 
                     #print( 'Loss value: {0}'.format(loss_value))
                     #print( 'W_conv1: {0}'.format(self.W_conv1.eval(session=self.Session) ))
                     #print( 'b_conv1: {0}'.format(self.b_conv1.eval(session=self.Session) ))
                     #print( 'y_conv: {0}'.format(self.y_conv.eval(feed_dict={self.x:x_examples, self.y_:y_examples, self.keep_prob: 1.0}, session=self.Session) ))
-                    print( 'Cross-Entropy: {0}'.format(self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))                    
+                    #print( 'Cross-Entropy: {0}'.format(self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))                    
                     if (i%self.savefreq==0) & (i!=0):
                         if gpu:
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_gpu_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize,  (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
@@ -256,9 +254,6 @@ class ConvNNet(object):
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize, (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
                         
             self.Test(testX, testy)
-            
-            
-
         return
     
     
@@ -304,14 +299,14 @@ def weight_variable(shape):
     '''
     Initialize a tensorflow weight variable
     '''
-    initial = tf.random_normal(shape, stddev=10**-3)
+    initial = tf.random_normal(shape, stddev=1e-3)
     return tf.Variable(initial) # note: this won't let us spread across multiple GPUs.
 
 def bias_variable(shape):
     '''
     Initialize a tensorflow bias variable
     '''
-    initial = tf.random_normal(shape, stddev=10**-3)
+    initial = tf.random_normal(shape, stddev=1e-3)
     return tf.Variable(initial)
 
 def conv2d(x,W):
