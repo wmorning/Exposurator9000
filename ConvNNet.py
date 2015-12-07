@@ -94,10 +94,11 @@ class ConvNNet(object):
             
         X = np.load('{0}/Xs_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
         y = np.load('{0}/ys_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
-        X[X==-99] = 0
+        X[X==-99] = np.nan
         if cg_additional!=1:
             X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
-        #X -= np.mean(X, axis=0)
+        X = 255*(np.arcsinh(X)-np.atleast_2d(np.arcsinh(np.nanmin(X,axis=1))).T)/np.atleast_2d((np.arcsinh(np.nanmax(X,axis=1))-np.arcsinh(np.nanmin(X,axis=1)))).T
+        X[np.isnan(X)] = -2.0
         ey = self.convert_labels(y, twoclasses)
 
         return X, ey
@@ -254,6 +255,7 @@ class ConvNNet(object):
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize, (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
                         
             self.Test(testX, testy)
+            #print(self.Predict(testX)-testy)
         return
     
     
@@ -266,6 +268,15 @@ class ConvNNet(object):
         print('Test Accuracy: ', test_accuracy)
         #raise Exception('cannot test model yet \n')
         return
+        
+    def Predict(self, data_x):
+        '''
+        Predict the classes for unseen data :)
+        '''        
+        
+        predictions = tf.arg_max(self.y_conv)
+        return( predictions.eval(feed_dict={self.x: data_x, self.keep_prob: 1.0},session=self.Session))
+        
         
     def Save_model(self, filename, Nsteps):
         '''
