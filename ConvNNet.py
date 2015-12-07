@@ -200,9 +200,9 @@ class ConvNNet(object):
         
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
-        #self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
-        self.nfn = min_false_neg(self.y_conv, self.y)
-        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.nfn)
+        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
+        #self.nfn = min_false_neg(self.y_conv, self.y_, self.Ncategories, session=self.Session)
+        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.cross_entropy)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
         #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
@@ -316,21 +316,25 @@ def max_pool_2x2(x):
     '''
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
-def min_false_neg(y, ytrue, naclass='last'):
+def min_false_neg(y, ytrue, nclass, naclass='last', session=None):
     
-    nclass = y.shape[1]
-    Lweights = np.ones(nclass, nclass)
+    Lweights = np.ones((nclass, nclass), dtype=np.float32)
 
     if naclass=='last':
         Lweights[-1,:] = 1000
     else:
         Lweights[0,:] = 1000
 
-    Lweights.diagonal = 0
+    dL =  Lweights.diagonal()
+    dL = 0
     Lweights = tf.constant(Lweights)
-    
+    print(Lweights.get_shape())
+    print(y.get_shape())
+    print(ytrue.get_shape())
     L = tf.matmul(ytrue, tf.matmul(Lweights, tf.transpose(y)))
-    L = tf.pack([x[i,i] for i in range(nclass)])
+    print(L.get_shape())
+
+    L = tf.pack([L[i,i] for i in range(nclass)])
     
     return tf.reduce_sum(L)
 
