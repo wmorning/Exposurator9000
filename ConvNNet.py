@@ -94,13 +94,14 @@ class ConvNNet(object):
         cg_additional -- additional coursegraining to perform on the fly
         """
             
-        X = np.load('{0}/Xs_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
-        y = np.load('{0}/ys_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        X = np.load('{0}/X_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        y = np.load('{0}/y_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
         X[X==-99] = np.nan
         if cg_additional!=1:
             X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
         X = 255*(np.arcsinh(X)-np.atleast_2d(np.arcsinh(np.nanmin(X,axis=1))).T)/np.atleast_2d((np.arcsinh(np.nanmax(X,axis=1))-np.arcsinh(np.nanmin(X,axis=1)))).T
-        X[np.isnan(X)] = -2.0
+        X[np.isnan(X)] = 0
+        #X -= np.atleast_2d(np.mean(X,axis=1)).T
         ey = self.convert_labels(y, twoclasses)
 
         return X, ey
@@ -150,6 +151,9 @@ class ConvNNet(object):
         # This is equivalent to measuring 32 features for each 5x5 
         # pannel of the original image.  We'll likely want many more 
         # features, and to use more pixels.  Keep that in mind.
+        #self.W_conv0 = bias_variable([5,5,1,1])
+        #self.h_conv0 = tf.nn.relu(conv2d(self.x_image,self.W_conv0))
+    
         print('Creating first layer')
         self.W_conv1 = weight_variable([Wsize_1,Wsize_1,1,Nfeatures_conv1])  # play around with altering sizes
         self.b_conv1 = bias_variable([Nfeatures_conv1])# length should be same as last dimension of W_conv1
@@ -202,7 +206,7 @@ class ConvNNet(object):
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
         self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
-        self.train_step = tf.train.AdamOptimizer(1e-2, epsilon=0.1).minimize(self.cross_entropy)
+        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.cross_entropy)
         #self.nfn = min_false_neg(self.y_conv, self.y_, self.Ncategories, session=self.Session)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
         #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
@@ -219,11 +223,11 @@ class ConvNNet(object):
 
         for npass in range(Nsteps):
             for i in range(self.Nmb):
-                print('Minibatch {0}'.format(i))
+                #print('Minibatch {0}'.format(i))
                 self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
                                                      self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses)
                 for j in range(self.Nstepspermb):
-                    print('Batch {0}'.format(j))
+                    #print('Batch {0}'.format(j))
                     # update the parameters using batch gradient descent.
                     # use 50 examples per iteration (can change)
                     next_set = np.arange(current_index,current_index+self.batchsize,1)% self.mbsize
@@ -232,7 +236,7 @@ class ConvNNet(object):
                     current_index = (current_index+self.batchsize) % self.mbsize
                     
                 #for every thousandth step, print the training error.
-                    if (i*self.Nstepspermb+j)%10 ==0:
+                    if (i*self.Nstepspermb+j)%1000 ==0:
                         train_accuracy = self.accuracy.eval(feed_dict={self.x:x_examples \
                                                                        , self.y_: y_examples, self.keep_prob: 1.0},session=self.Session)
                         print "step %d, training accuracy %g"%(i, train_accuracy)
@@ -243,13 +247,13 @@ class ConvNNet(object):
                         self.W1old = 1*self.W1curr
                     self.W1curr = self.W_conv1.eval(session=self.Session)
                     if (npass!=0) or (j!=0):
-                        print('model evolved by: ', np.sum(abs(self.W1curr-self.W1old)))
-
+                        #print('model evolved by: ', np.sum(abs(self.W1curr-self.W1old)))
+                        pass
                     #print( 'Loss value: {0}'.format(loss_value))
                     #print( 'W_conv1: {0}'.format(self.W_conv1.eval(session=self.Session) ))
                     #print( 'b_conv1: {0}'.format(self.b_conv1.eval(session=self.Session) ))
                     #print( 'y_conv: {0}'.format(self.y_conv.eval(feed_dict={self.x:x_examples, self.y_:y_examples, self.keep_prob: 1.0}, session=self.Session) ))
-                    print( 'Cross-Entropy: {0}'.format(self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))                    
+                    #print( 'Cross-Entropy: {0}'.format(self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))                    
                     if (i%self.savefreq==0) & (i!=0):
                         if gpu:
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_gpu_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize,  (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
@@ -257,7 +261,7 @@ class ConvNNet(object):
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize, (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
                         
             self.Test(testX, testy)
-            #print(self.Predict(testX)-testy)
+            print(self.cross_entropy.eval(feed_dict = {self.x: testX, self.y_: testy, self.keep_prob:1.0},session=self.Session))
             
             
 
@@ -279,7 +283,7 @@ class ConvNNet(object):
         Predict the classes for unseen data :)
         '''        
         
-        predictions = tf.arg_max(self.y_conv)
+        predictions = tf.arg_max(self.y_conv,1)
         return( predictions.eval(feed_dict={self.x: data_x, self.keep_prob: 1.0},session=self.Session))
         
         
@@ -315,14 +319,14 @@ def weight_variable(shape):
     '''
     Initialize a tensorflow weight variable
     '''
-    initial = tf.random_normal(shape, stddev=10**-3)
+    initial = tf.truncated_normal(shape, stddev=10**-2)
     return tf.Variable(initial) # note: this won't let us spread across multiple GPUs.
 
 def bias_variable(shape):
     '''
     Initialize a tensorflow bias variable
     '''
-    initial = tf.random_normal(shape, stddev=10**-3)
+    initial = tf.constant(0.001,shape=shape)
     return tf.Variable(initial)
 
 def conv2d(x,W):
