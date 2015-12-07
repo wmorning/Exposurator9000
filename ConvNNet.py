@@ -200,8 +200,9 @@ class ConvNNet(object):
         
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
-        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
-        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.cross_entropy)
+        #self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
+        self.nfn = min_false_neg(self.y_conv, self.y)
+        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.nfn)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
         #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
@@ -314,6 +315,24 @@ def max_pool_2x2(x):
     Return quadrant of image with max pixel values
     '''
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+
+def min_false_neg(y, ytrue, naclass='last'):
+    
+    nclass = y.shape[1]
+    Lweights = np.ones(nclass, nclass)
+
+    if naclass=='last':
+        Lweights[-1,:] = 1000
+    else:
+        Lweights[0,:] = 1000
+
+    Lweights.diagonal = 0
+    Lweights = tf.constant(Lweights)
+    
+    L = tf.matmul(ytrue, tf.matmul(Lweights, tf.transpose(y)))
+    L = tf.pack([x[i,i] for i in range(nclass)])
+    
+    return tf.reduce_sum(L)
 
 # ------------------------------------------------------------
 
