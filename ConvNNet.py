@@ -34,7 +34,7 @@ class ConvNNet(object):
     '''
     def __init__(self, nimg, farts, gridsize, cgfactor, mbsize=100,
                  mbpath='/home/jderose/scratch/des/data', batchsize=1,
-                 cgafactor=1, Nclasses=29):
+                 cgafactor=1, Ncategories=29):
         
         self.nimg = nimg
         self.farts = farts
@@ -42,33 +42,33 @@ class ConvNNet(object):
         self.cgfactor = cgfactor
         self.cgafactor = cgafactor
         self.Nmb = (self.nimg+mbsize-1)//mbsize
-        self.Ncategories = 29
+        self.Ncategories = Ncategories
         self.mbpath = mbpath
         self.mbsize = mbsize
         self.batchsize = batchsize
         self.Nstepspermb = 20
         self.savefreq = 1000
-        self.Nclasses = Nclasses
+
         
-        if self.Nclasses == 29:
+        if self.Ncategories == 29:
             self.twoclasses = False
-        elif self.Nclasses == 2:
+        elif self.Ncategories == 2:
                 self.twoclasses = True
         else:
             print 'You chose the wrong # of classes bro \n'
             print 'Switching to the default (29) classes \n'
             self.twoclasses = False
-            self.Nclasses = 29
+            self.Ncategories = 29
         
             
 
 
-    def convert_labels(self, y, twolabels):
+    def convert_labels(self, y, twoclasses):
 
         ey = InD.enumerate_labels(y)
 
         ey2 = np.zeros([len(ey),self.Ncategories],float)
-        if twolabels is True:
+        if twoclasses is True:
             for i in range(len(ey)):
                 ey2[i,ey[i]//29] = 1.0
         else:            
@@ -214,7 +214,7 @@ class ConvNNet(object):
         # batch gradient descent ticker
         current_index = 0
         testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, 1, cg_additional=self.cgafactor)
+                                           self.cgfactor, 1, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
 
         for npass in range(Nsteps):
             for i in range(self.Nmb):
