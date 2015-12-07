@@ -99,7 +99,7 @@ class ConvNNet(object):
         X[X==-99] = 0
         if cg_additional!=1:
             X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
-        X -= np.mean(X, axis=0)
+        #X -= np.mean(X, axis=0)
         ey = self.convert_labels(y, twoclasses)
 
         return X, ey
@@ -200,8 +200,8 @@ class ConvNNet(object):
         
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
-        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
-        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.cross_entropy)
+        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(self.y_conv))
+        self.train_step = tf.train.AdamOptimizer(1e-2, epsilon=0.1).minimize(self.cross_entropy)
         #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
         #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
@@ -213,7 +213,7 @@ class ConvNNet(object):
         # batch gradient descent ticker
         current_index = 0
         testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, 1, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
+                                           self.cgfactor, 0, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
 
         for npass in range(Nsteps):
             for i in range(self.Nmb):
@@ -236,17 +236,27 @@ class ConvNNet(object):
                         print "step %d, training accuracy %g"%(i, train_accuracy)
                         
                     self.train_step.run(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 0.5},session=self.Session)
+                    #debugging step --> dont keep
+                    if (npass !=0) or (j != 0):
+                        self.W1old = 1*self.W1curr
+                    self.W1curr = self.W_conv1.eval(session=self.Session)
+                    if (npass!=0) or (j!=0):
+                        print('model evolved by: ', np.sum(abs(self.W1curr-self.W1old)))
+
                     #print( 'Loss value: {0}'.format(loss_value))
                     #print( 'W_conv1: {0}'.format(self.W_conv1.eval(session=self.Session) ))
                     #print( 'b_conv1: {0}'.format(self.b_conv1.eval(session=self.Session) ))
                     #print( 'y_conv: {0}'.format(self.y_conv.eval(feed_dict={self.x:x_examples, self.y_:y_examples, self.keep_prob: 1.0}, session=self.Session) ))
+                    print( 'Cross-Entropy: {0}'.format(self.cross_entropy.eval(feed_dict={self.x: x_examples, self.y_: y_examples, self.keep_prob: 1.0}, session=self.Session)))                    
                     if (i%self.savefreq==0) & (i!=0):
                         if gpu:
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_gpu_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize,  (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
                         else:
                             self.Save_model('Trained_Model_{0}_{1}_{2}_{3}_mb{4}.tfm'.format(self.nimg, self.farts, self.gridsize, (self.cgfactor*self.cgafactor), i), i*self.Nstepspermb)
-            
+                        
             self.Test(testX, testy)
+            
+            
 
         return
     
@@ -293,14 +303,14 @@ def weight_variable(shape):
     '''
     Initialize a tensorflow weight variable
     '''
-    initial = tf.random_normal(shape, stddev=0.1)
+    initial = tf.random_normal(shape, stddev=10**-3)
     return tf.Variable(initial) # note: this won't let us spread across multiple GPUs.
 
 def bias_variable(shape):
     '''
     Initialize a tensorflow bias variable
     '''
-    initial = tf.random_normal(shape, stddev=0.1)
+    initial = tf.random_normal(shape, stddev=10**-3)
     return tf.Variable(initial)
 
 def conv2d(x,W):
