@@ -34,7 +34,7 @@ class ConvNNet(object):
     '''
     def __init__(self, nimg, farts, gridsize, cgfactor, mbsize=100,
                  mbpath='/home/jderose/scratch/des/data', batchsize=1,
-                 cgafactor=1):
+                 cgafactor=1, Nclasses=29):
         
         self.nimg = nimg
         self.farts = farts
@@ -48,20 +48,37 @@ class ConvNNet(object):
         self.batchsize = batchsize
         self.Nstepspermb = 20
         self.savefreq = 1000
+        self.Nclasses = Nclasses
+        
+        if self.Nclasses == 29:
+            self.twoclasses = False
+        elif self.Nclasses == 2:
+                self.twoclasses = True
+        else:
+            print 'You chose the wrong # of classes bro \n'
+            print 'Switching to the default (29) classes \n'
+            self.twoclasses = False
+            self.Nclasses = 29
+        
+            
 
 
-    def convert_labels(self, y):
+    def convert_labels(self, y, twolabels):
 
         ey = InD.enumerate_labels(y)
 
         ey2 = np.zeros([len(ey),self.Ncategories],float)
-        for i in range(len(ey)):
-            ey2[i,ey[i]-1] = 1.0
+        if twolabels is True:
+            for i in range(len(ey)):
+                ey2[i,ey[i]//29] = 1.0
+        else:            
+            for i in range(len(ey)):
+                ey2[i,ey[i]-1] = 1.0
             
         return ey2
 
     
-    def load_minibatch(self, filepath, nimg, farts, gridsize, cg, num,cg_additional=1):
+    def load_minibatch(self, filepath, nimg, farts, gridsize, cg, num,cg_additional=1,twoclasses=False):
         """
         Load a mini batch of images and their labels. 
         Labels need to be converted to tensorflow
@@ -83,7 +100,7 @@ class ConvNNet(object):
         if cg_additional!=1:
             X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
         X -= np.mean(X, axis=0)
-        ey = self.convert_labels(y)
+        ey = self.convert_labels(y, twoclasses)
 
         return X, ey
     
@@ -183,10 +200,10 @@ class ConvNNet(object):
         
         print('Setting optimization parameters')
         # run the optimization.  We'll minimize the cross entropy
-        #self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
-        #self.train_step = tf.train.AdamOptimizer(1e-15, epsilon=0.1).minimize(self.cross_entropy)
-        self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
-        self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.chisq)
+        self.cross_entropy = -tf.reduce_sum(self.y_*tf.log(tf.clip_by_value(self.y_conv,1e-10,1.0)))
+        self.train_step = tf.train.AdamOptimizer(1e-4, epsilon=0.1).minimize(self.cross_entropy)
+        #self.chisq = tf.reduce_mean(tf.pow(tf.sub(self.y_,self.y_conv),2)+1e-4)
+        #self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cross_entropy)
         self.correct_prediction = tf.equal(tf.argmax(self.y_conv,1), tf.argmax(self.y_,1))
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction,"float"))
 
@@ -196,13 +213,13 @@ class ConvNNet(object):
         # batch gradient descent ticker
         current_index = 0
         testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, 18, cg_additional=self.cgafactor)
+                                           self.cgfactor, 1, cg_additional=self.cgafactor)
 
         for npass in range(Nsteps):
             for i in range(self.Nmb):
                 print('Minibatch {0}'.format(i))
                 self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                                     self.cgfactor, i, cg_additional=self.cgafactor)
+                                                     self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses)
                 for j in range(self.Nstepspermb):
                     print('Batch {0}'.format(j))
                     # update the parameters using batch gradient descent.
