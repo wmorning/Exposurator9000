@@ -32,13 +32,13 @@ class ConvNNet(object):
     ConvNNet implements a convolutional neural network 
     using the TensorFlow framework.
     '''
-    def __init__(self, nimg, farts, gridsize, cgfactor, mbsize=100,
+    def __init__(self, nimg, farts, gridsize_x,gridsize_y, cgfactor, mbsize=100,
                  mbpath='/home/jderose/scratch/des/data', batchsize=1,
                  cgafactor=1, Ncategories=29, Nstepspermb=20):
         
         self.nimg = nimg
         self.farts = farts
-        self.gridsize = gridsize
+        self.gridsize_x = gridsize_x
         self.cgfactor = cgfactor
         self.cgafactor = cgafactor
         self.Nmb = (self.nimg+mbsize-1)//mbsize-1
@@ -48,6 +48,7 @@ class ConvNNet(object):
         self.batchsize = batchsize
         self.Nstepspermb = Nstepspermb
         self.savefreq = 1000
+        self.gridsize_y = gridsize_y
 
         
         if self.Ncategories == 29:
@@ -76,7 +77,7 @@ class ConvNNet(object):
         return ey2
 
     
-    def load_minibatch(self, filepath, nimg, farts, gridsize, cg, num,cg_additional=1,twoclasses=False):
+    def load_minibatch(self, filepath, nimg, farts, gridsize_x, cg, num,cg_additional=1,twoclasses=False,gridsize_y=None):
         """
         Load a mini batch of images and their labels. 
         Labels need to be converted to tensorflow
@@ -91,12 +92,15 @@ class ConvNNet(object):
         num -- The minibatch number 
         cg_additional -- additional coursegraining to perform on the fly
         """
+        
+        if gridsize_y is None:
+            self.gridsize_y = gridsize_x
             
-        X = np.load('{0}/X_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
-        y = np.load('{0}/y_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize, cg, num))
+        X = np.load('{0}/X_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize_x, cg, num))
+        y = np.load('{0}/y_{1}_{2}_{3}_{4}_mb{5}.npy'.format(filepath, nimg, farts, gridsize_x, cg, num))
         X[X==-99] = np.nan
         if cg_additional!=1:
-            X = np.mean(np.mean(X.reshape([X.shape[0],gridsize//cg,gridsize//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize//cg//cg_additional,gridsize//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize//cg//cg_additional)**2])
+            X = np.mean(np.mean(X.reshape([X.shape[0],gridsize_y//cg,gridsize_x//cg//cg_additional,cg_additional]),axis=3).T.reshape(gridsize_x//cg//cg_additional,gridsize_y//cg//cg_additional,cg_additional,X.shape[0]),axis=2).T.reshape([X.shape[0],(gridsize_y//cg//cg_additional)*(gridsize_x//cg//cg_additional)])
         X = 255*(np.arcsinh(X)-np.atleast_2d(np.arcsinh(np.nanmin(X,axis=1))).T)/np.atleast_2d((np.arcsinh(np.nanmax(X,axis=1))-np.arcsinh(np.nanmin(X,axis=1)))).T
         X[np.isnan(X)] = 0
         #X -= np.atleast_2d(np.mean(X,axis=1)).T
@@ -141,8 +145,8 @@ class ConvNNet(object):
         # start neural net: define x,y placeholders and create session
         #self.Session = tf.InteractiveSession()  # useful if running from notebook
         print('Allocating placeholders')
-        self.x = tf.placeholder("float",shape=[None,(self.gridsize//(self.cgfactor*self.cgafactor))**2])
-        self.x_image = tf.reshape(self.x,[-1,(self.gridsize//(self.cgfactor*self.cgafactor)),(self.gridsize//(self.cgfactor*self.cgafactor)),1])    
+        self.x = tf.placeholder("float",shape=[None,(self.gridsize_x*self.gridsize_y)//(self.cgfactor*self.cgafactor)**2])
+        self.x_image = tf.reshape(self.x,[-1,(self.gridsize_y//(self.cgfactor*self.cgafactor)),(self.gridsize_x//(self.cgfactor*self.cgafactor)),1])    
         self.y_ = tf.placeholder("float",shape=[None,self.Ncategories])
     
         # create first layer
@@ -179,11 +183,11 @@ class ConvNNet(object):
         # Densely Connected layer
         # Here, the 7x7x64 image tensor is flattened, and we get a 
         # 1x1024 vector using the form h_fc1 = h_2 * W + b
-        self.W_fc1 = weight_variable([(self.gridsize//(self.cgfactor*self.cgafactor)//4)**2*Nfeatures_conv2, Xlen_3])
+        self.W_fc1 = weight_variable([((self.gridsize_x*self.gridsize_y)//(self.cgfactor*self.cgafactor)**2//4**2)*Nfeatures_conv2, Xlen_3])
         self.b_fc1 = bias_variable([Xlen_3])
         self.h_pool2_flat = tf.reshape(self.h_pool2, [-1, \
-                                  (self.gridsize//(self.cgfactor*self.cgafactor)//4) \
-                                  *(self.gridsize//(self.cgfactor*self.cgafactor)//4)*Nfeatures_conv2])
+                                  (self.gridsize_y//(self.cgfactor*self.cgafactor)//4) \
+                                  *(self.gridsize_x//(self.cgfactor*self.cgafactor)//4)*Nfeatures_conv2])
         self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool2_flat, self.W_fc1)+self.b_fc1)
     
         print('Dropout')
@@ -219,15 +223,15 @@ class ConvNNet(object):
         
         # batch gradient descent ticker
         current_index = 0
-        testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, self.Nmb, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
+        testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize_x,
+                                           self.cgfactor, self.Nmb, cg_additional=self.cgafactor,twoclasses=self.twoclasses,gridsize_y=self.gridsize_y)
         xentropy = []
         testerr = []
         for npass in range(Nsteps):
             for i in range(self.Nmb):
                 #print('Minibatch {0}'.format(i))
-                self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                                     self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses)
+                self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize_x,
+                                                     self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses, gridsize_y=self.gridsize_y)
                 for j in range(self.Nstepspermb):
                     #print('Batch {0}'.format(j))
                     # update the parameters using batch gradient descent.
@@ -298,8 +302,8 @@ class ConvNNet(object):
         # start neural net: define x,y placeholders and create session
         #self.Session = tf.InteractiveSession()  # useful if running from notebook
         print('Allocating placeholders')
-        self.x = tf.placeholder("float",shape=[None,(self.gridsize//(self.cgfactor*self.cgafactor))**2])
-        self.x_image = tf.reshape(self.x,[-1,(self.gridsize//(self.cgfactor*self.cgafactor)),(self.gridsize//(self.cgfactor*self.cgafactor)),1])    
+        self.x = tf.placeholder("float",shape=[None,(self.gridsize_y*self.gridsize_x)//(self.cgfactor*self.cgafactor)**2])
+        self.x_image = tf.reshape(self.x,[-1,(self.gridsize_y//(self.cgfactor*self.cgafactor)),(self.gridsize_x//(self.cgfactor*self.cgafactor)),1])    
         self.y_ = tf.placeholder("float",shape=[None,self.Ncategories])
     
         # create first layer
@@ -336,11 +340,11 @@ class ConvNNet(object):
         # Densely Connected layer
         # Here, the 7x7x64 image tensor is flattened, and we get a 
         # 1x1024 vector using the form h_fc1 = h_2 * W + b
-        self.W_fc1 = weight_variable([(self.gridsize//(self.cgfactor*self.cgafactor)//4)**2*Nfeatures_conv2, Xlen_3])
+        self.W_fc1 = weight_variable([(self.gridsize_x*self.gridsize_y)//(self.cgfactor*self.cgafactor)**2//4**2*Nfeatures_conv2, Xlen_3])
         self.b_fc1 = bias_variable([Xlen_3])
         self.h_pool2_flat = tf.reshape(self.h_drop2, [-1, \
-                                  (self.gridsize//(self.cgfactor*self.cgafactor)//4) \
-                                  *(self.gridsize//(self.cgfactor*self.cgafactor)//4)*Nfeatures_conv2])
+                                  (self.gridsize_x//(self.cgfactor*self.cgafactor)//4) \
+                                  *(self.gridsize_y//(self.cgfactor*self.cgafactor)//4)*Nfeatures_conv2])
         self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool2_flat, self.W_fc1)+self.b_fc1)
     
         print('Dropout')
@@ -382,16 +386,16 @@ class ConvNNet(object):
         
         # batch gradient descent ticker
         current_index = 0
-        testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                           self.cgfactor, self.Nmb, cg_additional=self.cgafactor,twoclasses=self.twoclasses)
+        testX, testy = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize_x,
+                                           self.cgfactor, self.Nmb, cg_additional=self.cgafactor,twoclasses=self.twoclasses,gridsize_y = self.gridsize_y)
 
         xentropy = []
         testerr = []
         for npass in range(Nsteps):
             for i in range(self.Nmb):
                 #print('Minibatch {0}'.format(i))
-                self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize,
-                                                     self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses)
+                self.X, self.y = self.load_minibatch(self.mbpath, self.nimg, self.farts, self.gridsize_x,
+                                                     self.cgfactor, i, cg_additional=self.cgafactor, twoclasses=self.twoclasses,gridsize_y = self.gridsize_y)
                 for j in range(self.Nstepspermb):
                     #print('Batch {0}'.format(j))
                     # update the parameters using batch gradient descent.
